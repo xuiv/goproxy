@@ -9,11 +9,11 @@ import (
 	"github.com/phuslu/glog"
 	"github.com/phuslu/quic-go/h2quic"
 
-	"../../helpers"
+	"github.com/xuiv/goproxy/httpproxy/helpers"
 )
 
 type QuicTransport struct {
-	RoundTripper *h2quic.QuicRoundTripper
+	RoundTripper *h2quic.RoundTripper
 	MultiDialer  *helpers.MultiDialer
 	RetryDelay   time.Duration
 	RetryTimes   int

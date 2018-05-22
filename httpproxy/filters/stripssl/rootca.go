@@ -24,8 +24,8 @@ import (
 
 	"github.com/phuslu/glog"
 
-	"../../helpers"
-	"../../storage"
+	"github.com/xuiv/goproxy/httpproxy/helpers"
+	"github.com/xuiv/goproxy/httpproxy/storage"
 )
 
 const (

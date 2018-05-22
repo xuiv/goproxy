@@ -20,10 +20,10 @@ import (
 	"github.com/phuslu/net/http2"
 	"github.com/phuslu/quic-go/h2quic"
 
-	"../../filters"
-	"../../helpers"
-	"../../proxy"
-	"../../storage"
+	"github.com/xuiv/goproxy/httpproxy/filters"
+	"github.com/xuiv/goproxy/httpproxy/helpers"
+	"github.com/xuiv/goproxy/httpproxy/proxy"
+	"github.com/xuiv/goproxy/httpproxy/storage"
 )
 
 const (
@@ -139,8 +139,8 @@ func NewFilter(config *Config) (filters.Filter, error) {
 		},
 	}
 	switch config.TLSConfig.Version {
-	case "TLSv13", "TLSv1.3":
-		googleTLSConfig.MinVersion = tls.VersionTLS13
+	//case "TLSv13", "TLSv1.3":
+	//googleTLSConfig.MinVersion = tls.VersionTLS13
 	case "TLSv12", "TLSv1.2":
 		googleTLSConfig.MinVersion = tls.VersionTLS12
 	case "TLSv11", "TLSv1.1":
@@ -242,15 +242,6 @@ func NewFilter(config *Config) (filters.Filter, error) {
 
 	var tr http.RoundTripper
 
-	GetConnectMethodAddr := func(addr string) string {
-		if host, port, err := net.SplitHostPort(addr); err == nil {
-			if alias, ok := md.SiteToAlias.Lookup(host); ok {
-				addr = net.JoinHostPort(alias.(string), port)
-			}
-		}
-		return addr
-	}
-
 	t1 := &http.Transport{
 		DialTLS:               md.DialTLS,
 		DisableKeepAlives:     config.Transport.DisableKeepAlives,
@@ -258,7 +249,6 @@ func NewFilter(config *Config) (filters.Filter, error) {
 		ResponseHeaderTimeout: time.Duration(config.Transport.ResponseHeaderTimeout) * time.Second,
 		IdleConnTimeout:       time.Duration(config.Transport.IdleConnTimeout) * time.Second,
 		MaxIdleConnsPerHost:   config.Transport.MaxIdleConnsPerHost,
-		GetConnectMethodAddr:  GetConnectMethodAddr,
 	}
 
 	if config.Transport.Proxy.Enabled {
@@ -290,10 +280,10 @@ func NewFilter(config *Config) (filters.Filter, error) {
 	switch {
 	case config.EnableQuic:
 		tr = &QuicTransport{
-			RoundTripper: &h2quic.QuicRoundTripper{
+			RoundTripper: &h2quic.RoundTripper{
 				DisableCompression: true,
-				HandshakeTimeout:   md.Timeout,
-				DialAddr:           md.DialQuic,
+				//HandshakeTimeout:   md.Timeout,
+				Dial: md.DialQuic,
 			},
 			MultiDialer: md,
 			RetryTimes:  2,

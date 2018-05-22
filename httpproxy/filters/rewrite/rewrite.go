@@ -6,8 +6,8 @@ import (
 
 	"github.com/phuslu/glog"
 
-	"../../filters"
-	"../../storage"
+	"github.com/xuiv/goproxy/httpproxy/filters"
+	"github.com/xuiv/goproxy/httpproxy/storage"
 )
 
 const (

@@ -14,9 +14,9 @@ import (
 	"github.com/cloudflare/golibs/lrucache"
 	"github.com/phuslu/glog"
 
-	"../../filters"
-	"../../helpers"
-	"../../storage"
+	"github.com/xuiv/goproxy/httpproxy/filters"
+	"github.com/xuiv/goproxy/httpproxy/helpers"
+	"github.com/xuiv/goproxy/httpproxy/storage"
 )
 
 const (
@@ -88,8 +88,8 @@ func NewFilter(config *Config) (_ filters.Filter, err error) {
 	}
 
 	switch config.TLSVersion {
-	case "TLSv1.3":
-		f.TLSMaxVersion = tls.VersionTLS13
+	//case "TLSv1.3":
+	//f.TLSMaxVersion = tls.VersionTLS13
 	case "TLSv1.2":
 		f.TLSMaxVersion = tls.VersionTLS12
 	case "TLSv1.1":

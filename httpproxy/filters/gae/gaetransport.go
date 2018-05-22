@@ -10,7 +10,7 @@ import (
 
 	"github.com/phuslu/glog"
 
-	"../../helpers"
+	"github.com/xuiv/goproxy/httpproxy/helpers"
 )
 
 type Transport struct {

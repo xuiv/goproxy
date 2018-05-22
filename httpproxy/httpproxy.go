@@ -6,19 +6,19 @@ import (
 
 	"github.com/phuslu/glog"
 
-	"./filters"
-	"./helpers"
+	"github.com/xuiv/goproxy/httpproxy/filters"
+	"github.com/xuiv/goproxy/httpproxy/helpers"
 
-	_ "./filters/auth"
-	_ "./filters/autoproxy"
-	_ "./filters/autorange"
-	_ "./filters/direct"
-	_ "./filters/gae"
-	_ "./filters/php"
-	_ "./filters/rewrite"
-	_ "./filters/ssh2"
-	_ "./filters/stripssl"
-	_ "./filters/vps"
+	_ "github.com/xuiv/goproxy/httpproxy/filters/auth"
+	_ "github.com/xuiv/goproxy/httpproxy/filters/autoproxy"
+	_ "github.com/xuiv/goproxy/httpproxy/filters/autorange"
+	_ "github.com/xuiv/goproxy/httpproxy/filters/direct"
+	_ "github.com/xuiv/goproxy/httpproxy/filters/gae"
+	_ "github.com/xuiv/goproxy/httpproxy/filters/php"
+	_ "github.com/xuiv/goproxy/httpproxy/filters/rewrite"
+	_ "github.com/xuiv/goproxy/httpproxy/filters/ssh2"
+	_ "github.com/xuiv/goproxy/httpproxy/filters/stripssl"
+	_ "github.com/xuiv/goproxy/httpproxy/filters/vps"
 )
 
 type Config struct {

@@ -19,7 +19,7 @@ import (
 
 	"github.com/phuslu/glog"
 
-	"../../storage"
+	"github.com/xuiv/goproxy/httpproxy/storage"
 )
 
 const (
