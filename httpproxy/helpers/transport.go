@@ -24,20 +24,23 @@ var (
 	}
 )
 
-func CloseConnections(tr http.RoundTripper) {
+func CloseConnections(tr http.RoundTripper) bool{
 	f := func(_ net.Addr) bool { return true }
 
 	switch tr.(type) {
 	case *http2.Transport:
 		tr.(*http2.Transport).CloseConnection(f)
+		return true
 	case *h2quic.RoundTripper:
 		tr.(*h2quic.RoundTripper).CloseConnection(f)
+		return true
 	default:
 		glog.Errorf("%T(%v) has not implement CloseConnection method", tr, tr)
+		return false
 	}
 }
 
-func CloseConnectionByRemoteHost(tr http.RoundTripper, host string) {
+func CloseConnectionByRemoteHost(tr http.RoundTripper, host string) bool{
 	if host1, _, err := net.SplitHostPort(host); err == nil {
 		host = host1
 	}
@@ -52,10 +55,13 @@ func CloseConnectionByRemoteHost(tr http.RoundTripper, host string) {
 	switch tr.(type) {
 	case *http2.Transport:
 		tr.(*http2.Transport).CloseConnection(f)
+		return true
 	case *h2quic.RoundTripper:
 		tr.(*h2quic.RoundTripper).CloseConnection(f)
+		return true
 	default:
 		glog.Errorf("%T(%v) has not implement CloseConnection method", tr, tr)
+		return false
 	}
 }
 
