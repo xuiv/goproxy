@@ -25,7 +25,7 @@ var (
 
 func CloseConnections(tr http.RoundTripper) bool {
 	if t, ok := tr.(*http.Transport); ok {
-		t.CloseIdleConnections()
+		//t.CloseIdleConnections()
 		return true
 	}
 	if t, ok := tr.(*http2.Transport); ok {
