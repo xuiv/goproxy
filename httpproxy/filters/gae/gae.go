@@ -32,6 +32,7 @@ const (
 
 type Config struct {
 	AppIDs          []string
+	CustomDomains   []string
 	Password        string
 	SSLVerify       bool
 	DisableIPv6     bool
@@ -377,7 +378,11 @@ func NewFilter(config *Config) (filters.Filter, error) {
 		}()
 	}
 
+	if len(config.AppIDs) > 0 && len(config.CustomDomains) > 0 {
+		glog.Fatalf("GAE AppIDs and CustomDomains is conflict!")
+	}
 	helpers.ShuffleStrings(config.AppIDs)
+	helpers.ShuffleStrings(config.CustomDomains)
 
 	f := &Filter{
 		Config: *config,
