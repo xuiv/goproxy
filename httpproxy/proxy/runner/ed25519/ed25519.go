@@ -21,7 +21,7 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/xuiv/goagent/httpproxy/proxy/runner/ed25519/internal/edwards25519"
+	"github.com/xuiv/goproxy/httpproxy/proxy/runner/ed25519/internal/edwards25519"
 )
 
 const (

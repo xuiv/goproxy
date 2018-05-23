@@ -13,13 +13,13 @@ import (
 
 	"github.com/phuslu/glog"
 
-	"github.com/xuiv/goagent/httpproxy"
-	"github.com/xuiv/goagent/httpproxy/filters"
-	"github.com/xuiv/goagent/httpproxy/helpers"
-	"github.com/xuiv/goagent/httpproxy/storage"
+	"github.com/xuiv/goproxy/httpproxy"
+	"github.com/xuiv/goproxy/httpproxy/filters"
+	"github.com/xuiv/goproxy/httpproxy/helpers"
+	"github.com/xuiv/goproxy/httpproxy/storage"
 
-	"github.com/xuiv/goagent/httpproxy/filters/gae"
-	"github.com/xuiv/goagent/httpproxy/filters/php"
+	"github.com/xuiv/goproxy/httpproxy/filters/gae"
+	"github.com/xuiv/goproxy/httpproxy/filters/php"
 )
 
 var (

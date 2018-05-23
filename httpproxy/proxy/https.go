@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cloudflare/golibs/lrucache"
-	tls "github.com/xuiv/goagent/httpproxy/proxy/runner"
+	tls "github.com/xuiv/goproxy/httpproxy/proxy/runner"
 )
 
 func HTTPS(network, addr string, auth *Auth, forward Dialer, resolver Resolver) (Dialer, error) {

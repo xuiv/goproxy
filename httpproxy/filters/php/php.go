@@ -12,10 +12,10 @@ import (
 	"github.com/phuslu/glog"
 	"github.com/phuslu/net/http2"
 
-	"github.com/xuiv/goagent/httpproxy/filters"
-	"github.com/xuiv/goagent/httpproxy/helpers"
-	"github.com/xuiv/goagent/httpproxy/proxy"
-	"github.com/xuiv/goagent/httpproxy/storage"
+	"github.com/xuiv/goproxy/httpproxy/filters"
+	"github.com/xuiv/goproxy/httpproxy/helpers"
+	"github.com/xuiv/goproxy/httpproxy/proxy"
+	"github.com/xuiv/goproxy/httpproxy/storage"
 )
 
 const (

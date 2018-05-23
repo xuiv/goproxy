@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/xuiv/goagent/httpproxy/helpers"
+	"github.com/xuiv/goproxy/httpproxy/helpers"
 )
 
 type Server struct {

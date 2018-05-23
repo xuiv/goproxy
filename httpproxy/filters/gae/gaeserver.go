@@ -18,7 +18,7 @@ import (
 
 	"github.com/phuslu/glog"
 
-	"github.com/xuiv/goagent/httpproxy/helpers"
+	"github.com/xuiv/goproxy/httpproxy/helpers"
 )
 
 type Servers struct {

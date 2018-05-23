@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xuiv/goagent/httpproxy/proxy/runner/ed25519"
+	"github.com/xuiv/goproxy/httpproxy/proxy/runner/ed25519"
 )
 
 // Server returns a new TLS server side connection

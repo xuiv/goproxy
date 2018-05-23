@@ -6,19 +6,19 @@ import (
 
 	"github.com/phuslu/glog"
 
-	"github.com/xuiv/goagent/httpproxy/filters"
-	"github.com/xuiv/goagent/httpproxy/helpers"
+	"github.com/xuiv/goproxy/httpproxy/filters"
+	"github.com/xuiv/goproxy/httpproxy/helpers"
 
-	_ "github.com/xuiv/goagent/httpproxy/filters/auth"
-	_ "github.com/xuiv/goagent/httpproxy/filters/autoproxy"
-	_ "github.com/xuiv/goagent/httpproxy/filters/autorange"
-	_ "github.com/xuiv/goagent/httpproxy/filters/direct"
-	_ "github.com/xuiv/goagent/httpproxy/filters/gae"
-	_ "github.com/xuiv/goagent/httpproxy/filters/php"
-	_ "github.com/xuiv/goagent/httpproxy/filters/rewrite"
-	_ "github.com/xuiv/goagent/httpproxy/filters/ssh2"
-	_ "github.com/xuiv/goagent/httpproxy/filters/stripssl"
-	_ "github.com/xuiv/goagent/httpproxy/filters/vps"
+	_ "github.com/xuiv/goproxy/httpproxy/filters/auth"
+	_ "github.com/xuiv/goproxy/httpproxy/filters/autoproxy"
+	_ "github.com/xuiv/goproxy/httpproxy/filters/autorange"
+	_ "github.com/xuiv/goproxy/httpproxy/filters/direct"
+	_ "github.com/xuiv/goproxy/httpproxy/filters/gae"
+	_ "github.com/xuiv/goproxy/httpproxy/filters/php"
+	_ "github.com/xuiv/goproxy/httpproxy/filters/rewrite"
+	_ "github.com/xuiv/goproxy/httpproxy/filters/ssh2"
+	_ "github.com/xuiv/goproxy/httpproxy/filters/stripssl"
+	_ "github.com/xuiv/goproxy/httpproxy/filters/vps"
 )
 
 type Config struct {
