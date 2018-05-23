@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
@@ -21,7 +22,9 @@ import (
 )
 
 type roundTripperOpts struct {
-	DisableCompression bool
+	DisableCompression    bool
+	ResponseHeaderTimeout time.Duration
+	DialAddr              func(hostname string, tlsConfig *tls.Config, config *quic.Config) (quic.Session, error)
 }
 
 var dialAddr = quic.DialAddr
@@ -30,14 +33,17 @@ var dialAddr = quic.DialAddr
 type client struct {
 	mutex sync.RWMutex
 
+	createdAt time.Time
+	accessAt  time.Time
+
 	tlsConf *tls.Config
 	config  *quic.Config
 	opts    *roundTripperOpts
 
-	hostname     string
-	handshakeErr error
-	dialOnce     sync.Once
-	dialer       func(network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.Session, error)
+	hostname        string
+	encryptionLevel protocol.EncryptionLevel
+	handshakeErr    error
+	dialOnce        sync.Once
 
 	session       quic.Session
 	headerStream  quic.Stream
@@ -46,15 +52,13 @@ type client struct {
 	requestWriter *requestWriter
 
 	responses map[protocol.StreamID]chan *http.Response
-
-	logger utils.Logger
 }
 
 var _ http.RoundTripper = &client{}
 
 var defaultQuicConfig = &quic.Config{
-	RequestConnectionIDOmission: true,
-	KeepAlive:                   true,
+	RequestConnectionIDTruncation: true,
+	KeepAlive:                     true,
 }
 
 // newClient creates a new client
@@ -63,32 +67,32 @@ func newClient(
 	tlsConfig *tls.Config,
 	opts *roundTripperOpts,
 	quicConfig *quic.Config,
-	dialer func(network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.Session, error),
 ) *client {
 	config := defaultQuicConfig
 	if quicConfig != nil {
 		config = quicConfig
 	}
 	return &client{
-		hostname:      authorityAddr("https", hostname),
-		responses:     make(map[protocol.StreamID]chan *http.Response),
-		tlsConf:       tlsConfig,
-		config:        config,
-		opts:          opts,
-		headerErrored: make(chan struct{}),
-		dialer:        dialer,
-		logger:        utils.DefaultLogger,
+		createdAt:       time.Now(),
+		hostname:        authorityAddr("https", hostname),
+		responses:       make(map[protocol.StreamID]chan *http.Response),
+		encryptionLevel: protocol.EncryptionUnencrypted,
+		tlsConf:         tlsConfig,
+		config:          config,
+		opts:            opts,
+		headerErrored:   make(chan struct{}),
 	}
 }
 
 // dial dials the connection
 func (c *client) dial() error {
-	var err error
-	if c.dialer != nil {
-		c.session, err = c.dialer("udp", c.hostname, c.tlsConf, c.config)
-	} else {
-		c.session, err = dialAddr(c.hostname, c.tlsConf, c.config)
+	dialAddr := quic.DialAddr
+	if c.opts.DialAddr != nil {
+		dialAddr = c.opts.DialAddr
 	}
+
+	var err error
+	c.session, err = dialAddr(c.hostname, c.tlsConf, c.config)
 	if err != nil {
 		return err
 	}
@@ -98,7 +102,10 @@ func (c *client) dial() error {
 	if err != nil {
 		return err
 	}
-	c.requestWriter = newRequestWriter(c.headerStream, c.logger)
+	if c.headerStream.StreamID() != 3 {
+		return errors.New("h2quic Client BUG: StreamID of Header Stream is not 3")
+	}
+	c.requestWriter = newRequestWriter(c.headerStream)
 	go c.handleHeaderStream()
 	return nil
 }
@@ -107,50 +114,50 @@ func (c *client) handleHeaderStream() {
 	decoder := hpack.NewDecoder(4096, func(hf hpack.HeaderField) {})
 	h2framer := http2.NewFramer(nil, c.headerStream)
 
-	var err error
-	for err == nil {
-		err = c.readResponse(h2framer, decoder)
+	var lastStream protocol.StreamID
+
+	for {
+		frame, err := h2framer.ReadFrame()
+		if err != nil {
+			c.headerErr = qerr.Error(qerr.HeadersStreamDataDecompressFailure, "cannot read frame")
+			break
+		}
+		lastStream = protocol.StreamID(frame.Header().StreamID)
+		hframe, ok := frame.(*http2.HeadersFrame)
+		if !ok {
+			c.headerErr = qerr.Error(qerr.InvalidHeadersStreamData, "not a headers frame")
+			break
+		}
+		mhframe := &http2.MetaHeadersFrame{HeadersFrame: hframe}
+		mhframe.Fields, err = decoder.DecodeFull(hframe.HeaderBlockFragment())
+		if err != nil {
+			c.headerErr = qerr.Error(qerr.InvalidHeadersStreamData, "cannot read header fields")
+			break
+		}
+
+		c.mutex.RLock()
+		responseChan, ok := c.responses[protocol.StreamID(hframe.StreamID)]
+		c.mutex.RUnlock()
+		if !ok {
+			c.headerErr = qerr.Error(qerr.InternalError, fmt.Sprintf("h2client BUG: response channel for stream %d not found", lastStream))
+			break
+		}
+
+		rsp, err := responseFromHeaders(mhframe)
+		if err != nil {
+			c.headerErr = qerr.Error(qerr.InternalError, err.Error())
+		}
+		responseChan <- rsp
 	}
-	if quicErr, ok := err.(*qerr.QuicError); !ok || quicErr.ErrorCode != qerr.PeerGoingAway {
-		c.logger.Debugf("Error handling header stream: %s", err)
-	}
-	c.headerErr = qerr.Error(qerr.InvalidHeadersStreamData, err.Error())
+
 	// stop all running request
+	utils.Debugf("Error handling header stream %d: %s", lastStream, c.headerErr.Error())
 	close(c.headerErrored)
-}
-
-func (c *client) readResponse(h2framer *http2.Framer, decoder *hpack.Decoder) error {
-	frame, err := h2framer.ReadFrame()
-	if err != nil {
-		return err
-	}
-	hframe, ok := frame.(*http2.HeadersFrame)
-	if !ok {
-		return errors.New("not a headers frame")
-	}
-	mhframe := &http2.MetaHeadersFrame{HeadersFrame: hframe}
-	mhframe.Fields, err = decoder.DecodeFull(hframe.HeaderBlockFragment())
-	if err != nil {
-		return fmt.Errorf("cannot read header fields: %s", err.Error())
-	}
-
-	c.mutex.RLock()
-	responseChan, ok := c.responses[protocol.StreamID(hframe.StreamID)]
-	c.mutex.RUnlock()
-	if !ok {
-		return fmt.Errorf("response channel for stream %d not found", hframe.StreamID)
-	}
-
-	rsp, err := responseFromHeaders(mhframe)
-	if err != nil {
-		return err
-	}
-	responseChan <- rsp
-	return nil
 }
 
 // Roundtrip executes a request and returns a response
 func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
+	c.accessAt = time.Now()
 	// TODO: add port to address, if it doesn't have one
 	if req.URL.Scheme != "https" {
 		return nil, errors.New("quic http2: unsupported scheme")
@@ -209,7 +216,19 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		bodySent = true
 	}
 
-	ctx := req.Context()
+	var timeout time.Duration
+	if d := c.opts.ResponseHeaderTimeout; d != 0 {
+		timeout = d
+	} else {
+		timeout = 10 * time.Second
+	}
+
+	if ctx := req.Context(); ctx != nil {
+		if v := ctx.Value("ResponseHeaderTimeout"); v != nil {
+			timeout = v.(time.Duration)
+		}
+	}
+
 	for !(bodySent && receivedResponse) {
 		select {
 		case res = <-responseChan:
@@ -222,16 +241,15 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 			if err != nil {
 				return nil, err
 			}
-		case <-ctx.Done():
-			// error code 6 signals that stream was canceled
-			dataStream.CancelRead(6)
-			dataStream.CancelWrite(6)
-			c.mutex.Lock()
-			delete(c.responses, dataStream.StreamID())
-			c.mutex.Unlock()
-			return nil, ctx.Err()
 		case <-c.headerErrored:
-			// an error occurred on the header stream
+			// an error occured on the header stream
+			_ = c.CloseWithError(c.headerErr)
+			return nil, c.headerErr
+		case <-time.After(timeout):
+			// wait response timed out
+			c.headerStream.Close()
+			c.headerErr = qerr.Error(qerr.NetworkIdleTimeout, "read response header timed out")
+			// an error occured on the header stream
 			_ = c.CloseWithError(c.headerErr)
 			return nil, c.headerErr
 		}
@@ -256,15 +274,8 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 	}
 
-	cs := c.session.ConnectionState()
-	req.TLS = &tls.ConnectionState{
-		HandshakeComplete: cs.HandshakeComplete,
-		ServerName:        cs.ServerName,
-		PeerCertificates:  cs.PeerCertificates,
-		Version:           0x0304,
-	}
-
 	res.Request = req
+	res.TLS = c.session.ConnectionState()
 	return res, nil
 }
 

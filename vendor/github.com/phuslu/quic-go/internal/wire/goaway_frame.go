@@ -16,32 +16,32 @@ type GoawayFrame struct {
 	ReasonPhrase   string
 }
 
-// parseGoawayFrame parses a GOAWAY frame
-func parseGoawayFrame(r *bytes.Reader, _ protocol.VersionNumber) (*GoawayFrame, error) {
+// ParseGoawayFrame parses a GOAWAY frame
+func ParseGoawayFrame(r *bytes.Reader, version protocol.VersionNumber) (*GoawayFrame, error) {
 	frame := &GoawayFrame{}
 
 	if _, err := r.ReadByte(); err != nil {
 		return nil, err
 	}
 
-	errorCode, err := utils.BigEndian.ReadUint32(r)
+	errorCode, err := utils.GetByteOrder(version).ReadUint32(r)
 	if err != nil {
 		return nil, err
 	}
 	frame.ErrorCode = qerr.ErrorCode(errorCode)
 
-	lastGoodStream, err := utils.BigEndian.ReadUint32(r)
+	lastGoodStream, err := utils.GetByteOrder(version).ReadUint32(r)
 	if err != nil {
 		return nil, err
 	}
 	frame.LastGoodStream = protocol.StreamID(lastGoodStream)
 
-	reasonPhraseLen, err := utils.BigEndian.ReadUint16(r)
+	reasonPhraseLen, err := utils.GetByteOrder(version).ReadUint16(r)
 	if err != nil {
 		return nil, err
 	}
 
-	if reasonPhraseLen > uint16(protocol.MaxReceivePacketSize) {
+	if reasonPhraseLen > uint16(protocol.MaxPacketSize) {
 		return nil, qerr.Error(qerr.InvalidGoawayData, "reason phrase too long")
 	}
 
@@ -53,16 +53,16 @@ func parseGoawayFrame(r *bytes.Reader, _ protocol.VersionNumber) (*GoawayFrame, 
 	return frame, nil
 }
 
-func (f *GoawayFrame) Write(b *bytes.Buffer, _ protocol.VersionNumber) error {
+func (f *GoawayFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
 	b.WriteByte(0x03)
-	utils.BigEndian.WriteUint32(b, uint32(f.ErrorCode))
-	utils.BigEndian.WriteUint32(b, uint32(f.LastGoodStream))
-	utils.BigEndian.WriteUint16(b, uint16(len(f.ReasonPhrase)))
+	utils.GetByteOrder(version).WriteUint32(b, uint32(f.ErrorCode))
+	utils.GetByteOrder(version).WriteUint32(b, uint32(f.LastGoodStream))
+	utils.GetByteOrder(version).WriteUint16(b, uint16(len(f.ReasonPhrase)))
 	b.WriteString(f.ReasonPhrase)
 	return nil
 }
 
-// Length of a written frame
-func (f *GoawayFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
-	return protocol.ByteCount(1 + 4 + 4 + 2 + len(f.ReasonPhrase))
+// MinLength of a written frame
+func (f *GoawayFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
+	return protocol.ByteCount(1 + 4 + 4 + 2 + len(f.ReasonPhrase)), nil
 }

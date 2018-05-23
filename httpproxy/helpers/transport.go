@@ -3,7 +3,9 @@ package helpers
 import (
 	"net"
 	"net/http"
+	"path"
 	"strconv"
+	"strings"
 
 	"github.com/phuslu/glog"
 	"github.com/phuslu/net/http2"
@@ -24,23 +26,22 @@ var (
 	}
 )
 
-func CloseConnections(tr http.RoundTripper) bool{
+func CloseConnections(tr http.RoundTripper) {
 	f := func(_ net.Addr) bool { return true }
 
 	switch tr.(type) {
+	//case *http.Transport:
+	//	tr.(*http.Transport).CloseConnection(f)
 	case *http2.Transport:
 		tr.(*http2.Transport).CloseConnection(f)
-		return true
 	case *h2quic.RoundTripper:
 		tr.(*h2quic.RoundTripper).CloseConnection(f)
-		return true
 	default:
 		glog.Errorf("%T(%v) has not implement CloseConnection method", tr, tr)
-		return false
 	}
 }
 
-func CloseConnectionByRemoteHost(tr http.RoundTripper, host string) bool{
+func CloseConnectionByRemoteHost(tr http.RoundTripper, host string) {
 	if host1, _, err := net.SplitHostPort(host); err == nil {
 		host = host1
 	}
@@ -53,15 +54,14 @@ func CloseConnectionByRemoteHost(tr http.RoundTripper, host string) bool{
 	}
 
 	switch tr.(type) {
+	//case *http.Transport:
+	//	tr.(*http.Transport).CloseConnection(f)
 	case *http2.Transport:
 		tr.(*http2.Transport).CloseConnection(f)
-		return true
 	case *h2quic.RoundTripper:
 		tr.(*h2quic.RoundTripper).CloseConnection(f)
-		return true
 	default:
 		glog.Errorf("%T(%v) has not implement CloseConnection method", tr, tr)
-		return false
 	}
 }
 
@@ -104,4 +104,34 @@ func GetHostName(req *http.Request) string {
 	} else {
 		return req.Host
 	}
+}
+
+func IsStaticRequest(req *http.Request) bool {
+	switch path.Ext(req.URL.Path) {
+	case "bmp", "gif", "ico", "jpeg", "jpg", "png", "tif", "tiff",
+		"3gp", "3gpp", "avi", "f4v", "flv", "m4p", "mkv", "mp4",
+		"mp4v", "mpv4", "rmvb", ".webp", ".js", ".css":
+		return true
+	case "":
+		name := path.Base(req.URL.Path)
+		if strings.Contains(name, "play") ||
+			strings.Contains(name, "video") {
+			return true
+		}
+	default:
+		if req.Header.Get("Range") != "" ||
+			strings.Contains(req.Host, "img.") ||
+			strings.Contains(req.Host, "cache.") ||
+			strings.Contains(req.Host, "video.") ||
+			strings.Contains(req.Host, "static.") ||
+			strings.HasPrefix(req.Host, "img") ||
+			strings.HasPrefix(req.URL.Path, "/static") ||
+			strings.HasPrefix(req.URL.Path, "/asset") ||
+			strings.Contains(req.URL.Path, "static") ||
+			strings.Contains(req.URL.Path, "asset") ||
+			strings.Contains(req.URL.Path, "/cache/") {
+			return true
+		}
+	}
+	return false
 }

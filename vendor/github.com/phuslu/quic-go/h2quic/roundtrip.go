@@ -7,12 +7,14 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	quic "github.com/phuslu/quic-go"
 
-	"golang.org/x/net/http/httpguts"
+	"golang.org/x/net/lex/httplex"
 )
 
 type roundTripCloser interface {
@@ -34,6 +36,12 @@ type RoundTripper struct {
 	// uncompressed.
 	DisableCompression bool
 
+	// ResponseHeaderTimeout, if non-zero, specifies the amount of
+	// time to wait for a server's response headers after fully
+	// writing the request (including its body, if any). This
+	// time does not include the time to read the response body.
+	ResponseHeaderTimeout time.Duration
+
 	// TLSClientConfig specifies the TLS configuration to use with
 	// tls.Client. If nil, the default configuration is used.
 	TLSClientConfig *tls.Config
@@ -41,14 +49,20 @@ type RoundTripper struct {
 	// GetClientKey specifies a function to return a clients key string for hostname
 	GetClientKey func(hostname string) string
 
+	// DialAddr specifies an optional function for quic.DailAddr.
+	// If this value is nil, it will default to net.DialAddr for the client.
+	DialAddr func(hostname string, tlsConfig *tls.Config, config *quic.Config) (quic.Session, error)
+
 	// QuicConfig is the quic.Config used for dialing new connections.
 	// If nil, reasonable default values will be used.
 	QuicConfig *quic.Config
 
-	// Dial specifies an optional dial function for creating QUIC
-	// connections for requests.
-	// If Dial is nil, quic.DialAddr will be used.
-	Dial func(network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.Session, error)
+	// KeepAliveTimeout is specifies an optional duration for quic.Session life time.
+	// If this value is zero, it will never close
+	KeepAliveTimeout time.Duration
+
+	// IdleConnTimeout is specifies an optional duration for quic.Session idle time.
+	IdleConnTimeout time.Duration
 
 	clients map[string]roundTripCloser
 }
@@ -84,11 +98,11 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 
 	if req.URL.Scheme == "https" {
 		for k, vv := range req.Header {
-			if !httpguts.ValidHeaderFieldName(k) {
+			if !httplex.ValidHeaderFieldName(k) {
 				return nil, fmt.Errorf("quic: invalid http header field name %q", k)
 			}
 			for _, v := range vv {
-				if !httpguts.ValidHeaderFieldValue(v) {
+				if !httplex.ValidHeaderFieldValue(v) {
 					return nil, fmt.Errorf("quic: invalid http header field value %q for key %v", v, k)
 				}
 			}
@@ -154,21 +168,22 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTr
 		hostnameKey = hostname
 	}
 
-	client, ok := r.clients[hostnameKey]
+	c, ok := r.clients[hostnameKey]
+	if ok && r.KeepAliveTimeout != 0 && time.Since(c.(*client).createdAt) > r.KeepAliveTimeout {
+		ok = false
+	}
+	if ok && r.IdleConnTimeout != 0 && time.Since(c.(*client).accessAt) > r.IdleConnTimeout {
+		ok = false
+	}
 	if !ok {
 		if onlyCached {
 			return nil, ErrNoCachedConn
 		}
-		client = newClient(
-			hostname,
-			r.TLSClientConfig,
-			&roundTripperOpts{DisableCompression: r.DisableCompression},
-			r.QuicConfig,
-			r.Dial,
-		)
-		r.clients[hostname] = client
+		c = newClient(hostname, r.TLSClientConfig, &roundTripperOpts{DisableCompression: r.DisableCompression, ResponseHeaderTimeout: r.ResponseHeaderTimeout, DialAddr: r.DialAddr}, r.QuicConfig)
+		runtime.SetFinalizer(c, func(r *client) { r.Close() })
+		r.clients[hostnameKey] = c
 	}
-	return client, nil
+	return c, nil
 }
 
 // Close closes the QUIC connections that this RoundTripper has used
@@ -209,7 +224,7 @@ func validMethod(method string) bool {
 
 // copied from net/http/http.go
 func isNotToken(r rune) bool {
-	return !httpguts.IsTokenRune(r)
+	return !httplex.IsTokenRune(r)
 }
 
 // CloseConnections remove clients according the net.Addr

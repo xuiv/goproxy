@@ -1,8 +1,6 @@
 package protocol
 
-import (
-	"fmt"
-)
+import "math"
 
 // A PacketNumber in QUIC
 type PacketNumber uint64
@@ -23,43 +21,17 @@ const (
 	PacketNumberLen6 PacketNumberLen = 6
 )
 
-// The PacketType is the Long Header Type (only used for the IETF draft header format)
-type PacketType uint8
+// A ConnectionID in QUIC
+type ConnectionID uint64
 
-const (
-	// PacketTypeInitial is the packet type of an Initial packet
-	PacketTypeInitial PacketType = 0x7f
-	// PacketTypeRetry is the packet type of a Retry packet
-	PacketTypeRetry PacketType = 0x7e
-	// PacketTypeHandshake is the packet type of a Handshake packet
-	PacketTypeHandshake PacketType = 0x7d
-	// PacketType0RTT is the packet type of a 0-RTT packet
-	PacketType0RTT PacketType = 0x7c
-)
-
-func (t PacketType) String() string {
-	switch t {
-	case PacketTypeInitial:
-		return "Initial"
-	case PacketTypeRetry:
-		return "Retry"
-	case PacketTypeHandshake:
-		return "Handshake"
-	case PacketType0RTT:
-		return "0-RTT Protected"
-	default:
-		return fmt.Sprintf("unknown packet type: %d", t)
-	}
-}
+// A StreamID in QUIC
+type StreamID uint32
 
 // A ByteCount in QUIC
 type ByteCount uint64
 
 // MaxByteCount is the maximum value of a ByteCount
-const MaxByteCount = ByteCount(1<<62 - 1)
-
-// An ApplicationErrorCode is an application-defined error code.
-type ApplicationErrorCode uint16
+const MaxByteCount = ByteCount(math.MaxUint64)
 
 // MaxReceivePacketSize maximum packet size of any QUIC packet, based on
 // ethernet's max size, minus the IP and UDP headers. IPv6 has a 40 byte header,
@@ -71,14 +43,17 @@ const MaxReceivePacketSize ByteCount = 1452
 // Used in QUIC for congestion window computations in bytes.
 const DefaultTCPMSS ByteCount = 1460
 
-// MinClientHelloSize is the minimum size the server expects an inchoate CHLO to have (in gQUIC)
-const MinClientHelloSize = 1024
+// InitialStreamFlowControlWindow is the initial stream-level flow control window for sending
+const InitialStreamFlowControlWindow ByteCount = (1 << 14) // 16 kB
 
-// MinInitialPacketSize is the minimum size an Initial packet (in IETF QUIC) is required to have.
-const MinInitialPacketSize = 1200
+// InitialConnectionFlowControlWindow is the initial connection-level flow control window for sending
+const InitialConnectionFlowControlWindow ByteCount = (1 << 14) // 16 kB
+
+// ClientHelloMinimumSize is the minimum size the server expects an inchoate CHLO to have.
+const ClientHelloMinimumSize = 1024
 
 // MaxClientHellos is the maximum number of times we'll send a client hello
 // The value 3 accounts for:
 // * one failure due to an incorrect or missing source-address token
-// * one failure due the server's certificate chain being unavailable and the server being unwilling to send it without a valid source-address token
+// * one failure due the server's certificate chain being unavailible and the server being unwilling to send it without a valid source-address token
 const MaxClientHellos = 3

@@ -17,9 +17,9 @@ type packetNumberGenerator struct {
 	nextToSkip protocol.PacketNumber
 }
 
-func newPacketNumberGenerator(initial, averagePeriod protocol.PacketNumber) *packetNumberGenerator {
+func newPacketNumberGenerator(averagePeriod protocol.PacketNumber) *packetNumberGenerator {
 	return &packetNumberGenerator{
-		next:          initial,
+		next:          1,
 		averagePeriod: averagePeriod,
 	}
 }

@@ -4,7 +4,7 @@ import (
 	"crypto/tls"
 )
 
-func Cipher(name string) uint16 {
+func TLSCipher(name string) uint16 {
 	switch name {
 	case "TLS_RSA_WITH_RC4_128_SHA":
 		return tls.TLS_RSA_WITH_RC4_128_SHA
@@ -54,7 +54,7 @@ func Cipher(name string) uint16 {
 	return 0
 }
 
-func CipherName(value uint16) string {
+func TLSCipherName(value uint16) string {
 	switch value {
 
 	case tls.TLS_RSA_WITH_RC4_128_SHA:

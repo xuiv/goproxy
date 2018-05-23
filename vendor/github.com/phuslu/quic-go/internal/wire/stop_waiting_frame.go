@@ -6,6 +6,7 @@ import (
 
 	"github.com/phuslu/quic-go/internal/protocol"
 	"github.com/phuslu/quic-go/internal/utils"
+	"github.com/phuslu/quic-go/qerr"
 )
 
 // A StopWaitingFrame in QUIC
@@ -22,10 +23,7 @@ var (
 	errPacketNumberLenNotSet              = errors.New("StopWaitingFrame: PacketNumberLen not set")
 )
 
-func (f *StopWaitingFrame) Write(b *bytes.Buffer, v protocol.VersionNumber) error {
-	if v.UsesIETFFrameFormat() {
-		return errors.New("STOP_WAITING not defined in IETF QUIC")
-	}
+func (f *StopWaitingFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
 	// make sure the PacketNumber was set
 	if f.PacketNumber == protocol.PacketNumber(0) {
 		return errPacketNumberNotSet
@@ -40,24 +38,30 @@ func (f *StopWaitingFrame) Write(b *bytes.Buffer, v protocol.VersionNumber) erro
 	case protocol.PacketNumberLen1:
 		b.WriteByte(uint8(leastUnackedDelta))
 	case protocol.PacketNumberLen2:
-		utils.BigEndian.WriteUint16(b, uint16(leastUnackedDelta))
+		utils.GetByteOrder(version).WriteUint16(b, uint16(leastUnackedDelta))
 	case protocol.PacketNumberLen4:
-		utils.BigEndian.WriteUint32(b, uint32(leastUnackedDelta))
+		utils.GetByteOrder(version).WriteUint32(b, uint32(leastUnackedDelta))
 	case protocol.PacketNumberLen6:
-		utils.BigEndian.WriteUint48(b, leastUnackedDelta&(1<<48-1))
+		utils.GetByteOrder(version).WriteUint48(b, leastUnackedDelta&(1<<48-1))
 	default:
 		return errPacketNumberLenNotSet
 	}
 	return nil
 }
 
-// Length of a written frame
-func (f *StopWaitingFrame) Length(_ protocol.VersionNumber) protocol.ByteCount {
-	return 1 + protocol.ByteCount(f.PacketNumberLen)
+// MinLength of a written frame
+func (f *StopWaitingFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
+	minLength := protocol.ByteCount(1) // typeByte
+
+	if f.PacketNumberLen == protocol.PacketNumberLenInvalid {
+		return 0, errPacketNumberLenNotSet
+	}
+	minLength += protocol.ByteCount(f.PacketNumberLen)
+	return minLength, nil
 }
 
-// parseStopWaitingFrame parses a StopWaiting frame
-func parseStopWaitingFrame(r *bytes.Reader, packetNumber protocol.PacketNumber, packetNumberLen protocol.PacketNumberLen, _ protocol.VersionNumber) (*StopWaitingFrame, error) {
+// ParseStopWaitingFrame parses a StopWaiting frame
+func ParseStopWaitingFrame(r *bytes.Reader, packetNumber protocol.PacketNumber, packetNumberLen protocol.PacketNumberLen, version protocol.VersionNumber) (*StopWaitingFrame, error) {
 	frame := &StopWaitingFrame{}
 
 	// read the TypeByte
@@ -65,12 +69,12 @@ func parseStopWaitingFrame(r *bytes.Reader, packetNumber protocol.PacketNumber, 
 		return nil, err
 	}
 
-	leastUnackedDelta, err := utils.BigEndian.ReadUintN(r, uint8(packetNumberLen))
+	leastUnackedDelta, err := utils.GetByteOrder(version).ReadUintN(r, uint8(packetNumberLen))
 	if err != nil {
 		return nil, err
 	}
-	if leastUnackedDelta > uint64(packetNumber) {
-		return nil, errors.New("invalid LeastUnackedDelta")
+	if leastUnackedDelta >= uint64(packetNumber) {
+		return nil, qerr.Error(qerr.InvalidStopWaitingData, "invalid LeastUnackedDelta")
 	}
 	frame.LeastUnacked = protocol.PacketNumber(uint64(packetNumber) - leastUnackedDelta)
 	return frame, nil

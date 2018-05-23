@@ -13,7 +13,7 @@
 // UTS #46 is defined in http://www.unicode.org/reports/tr46.
 // See http://unicode.org/cldr/utility/idna.jsp for a visualization of the
 // differences between these two standards.
-package idna // import "github.com/phuslu/net/idna"
+package idna
 
 import (
 	"fmt"

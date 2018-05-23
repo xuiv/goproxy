@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cloudflare/golibs/lrucache"
-	tls "github.com/xuiv/goproxy/httpproxy/proxy/runner"
+	tls "github.com/xuiv/goagent/httpproxy/proxy/runner"
 )
 
 func HTTPS(network, addr string, auth *Auth, forward Dialer, resolver Resolver) (Dialer, error) {
@@ -79,9 +79,9 @@ func (h *https) Dial(network, addr string) (net.Conn, error) {
 		config = v.(*tls.Config)
 	} else {
 		config = &tls.Config{
-			MinVersion:         tls.VersionTLS10,
-			MaxVersion:         tls.VersionTLS13,
-			InsecureSkipVerify: true,
+			MinVersion: tls.VersionTLS10,
+			MaxVersion: tls.VersionTLS13,
+			// InsecureSkipVerify: true,
 			ServerName:         h.hostname,
 			ClientSessionCache: tls.NewLRUClientSessionCache(1024),
 			MaxEarlyDataSize:   100 * 1024,

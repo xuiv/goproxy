@@ -20,8 +20,8 @@ import (
 	"encoding/binary"
 	"errors"
 
+	//"github.com/xuiv/goagent/httpproxy/proxy/runner/poly1305"
 	"golang.org/x/crypto/poly1305"
-	//"github.com/xuiv/goproxy/httpproxy/proxy/runner/poly1305"
 )
 
 // See RFC 7539.

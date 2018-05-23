@@ -15,9 +15,9 @@ import (
 	"io"
 	"math/big"
 
+	//"github.com/xuiv/goagent/httpproxy/proxy/runner/curve25519"
+	"github.com/xuiv/goagent/httpproxy/proxy/runner/ed25519"
 	"golang.org/x/crypto/curve25519"
-	//"github.com/xuiv/goproxy/httpproxy/proxy/runner/curve25519"
-	"github.com/xuiv/goproxy/httpproxy/proxy/runner/ed25519"
 )
 
 type keyType int

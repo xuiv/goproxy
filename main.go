@@ -13,18 +13,17 @@ import (
 
 	"github.com/phuslu/glog"
 
-	"github.com/xuiv/goproxy/httpproxy"
-	"github.com/xuiv/goproxy/httpproxy/filters"
-	"github.com/xuiv/goproxy/httpproxy/helpers"
-	"github.com/xuiv/goproxy/httpproxy/storage"
+	"github.com/xuiv/goagent/httpproxy"
+	"github.com/xuiv/goagent/httpproxy/filters"
+	"github.com/xuiv/goagent/httpproxy/helpers"
+	"github.com/xuiv/goagent/httpproxy/storage"
 
-	"github.com/xuiv/goproxy/httpproxy/filters/gae"
-	"github.com/xuiv/goproxy/httpproxy/filters/php"
+	"github.com/xuiv/goagent/httpproxy/filters/gae"
+	"github.com/xuiv/goagent/httpproxy/filters/php"
 )
 
 var (
-	version  = "r9999"
-	http2rev = "?????"
+	version = "r9999"
 )
 
 func init() {
@@ -72,8 +71,8 @@ func main() {
 	}
 
 	fmt.Fprintf(os.Stderr, `------------------------------------------------------
-GoProxy Version    : %s (go/%s http2/%s %s/%s)`,
-		version, gover, http2rev, runtime.GOOS, runtime.GOARCH)
+GoProxy Version    : %s (go/%s %s/%s)`,
+		version, gover, runtime.GOOS, runtime.GOARCH)
 	for profile, config := range config {
 		if !config.Enabled {
 			continue
@@ -108,15 +107,30 @@ Enabled Filters    : %v`,
 				fmt.Fprintf(os.Stderr, `
 Pac Server         : http://%s/proxy.pac`, addr)
 			case "gae":
-				fmt.Fprintf(os.Stderr, `
-GAE AppIDs         : %s`, strings.Join(f.(*gae.Filter).Config.AppIDs, "|"))
+				config := f.(*gae.Filter).Config
+				if len(config.AppIDs) > 0 {
+					fmt.Fprintf(os.Stderr, `
+GAE AppIDs         : %s`, strings.Join(config.AppIDs, "|"))
+				}
+				if len(config.CustomDomains) > 0 {
+					fmt.Fprintf(os.Stderr, `
+GAE Domains        : %s`, strings.Join(config.CustomDomains, "|"))
+				}
+				switch {
+				case config.EnableQuic:
+					fmt.Fprintf(os.Stderr, `
+GAE Mode           : Quic`)
+				default:
+					fmt.Fprintf(os.Stderr, `
+GAE Mode           : TLS`)
+				}
 			case "php":
 				urls := make([]string, 0)
 				for _, s := range f.(*php.Filter).Config.Servers {
 					urls = append(urls, s.URL)
 				}
 				fmt.Fprintf(os.Stderr, `
-GAE AppIDs         : %s`, strings.Join(urls, "|"))
+PHP Servers         : %s`, strings.Join(urls, "|"))
 			}
 		}
 		go httpproxy.ServeProfile(config, "goproxy "+version)

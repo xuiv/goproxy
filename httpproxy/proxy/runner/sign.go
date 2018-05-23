@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/xuiv/goproxy/httpproxy/proxy/runner/ed25519"
+	"github.com/xuiv/goagent/httpproxy/proxy/runner/ed25519"
 )
 
 type signer interface {

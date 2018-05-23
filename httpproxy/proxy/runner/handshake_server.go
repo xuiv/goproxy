@@ -18,7 +18,7 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/xuiv/goproxy/httpproxy/proxy/runner/ed25519"
+	"github.com/xuiv/goagent/httpproxy/proxy/runner/ed25519"
 )
 
 // serverHandshakeState contains details of a server handshake in progress.
