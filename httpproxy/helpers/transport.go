@@ -55,10 +55,9 @@ func CloseConnectionByRemoteHost(tr http.RoundTripper, host string) bool {
 	switch tr.(type) {
 	case *http.Transport:
 		//tr.(*http.Transport).CloseConnections(f)
-		tr.(*http.Transport).CloseIdleConnections()
+		//tr.(*http.Transport).CloseIdleConnections()
 		return true
 	case *http2.Transport:
-
 		tr.(*http2.Transport).CloseConnection(f2)
 		return true
 	case *h2quic.RoundTripper:
