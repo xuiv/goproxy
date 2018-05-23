@@ -10,10 +10,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"mime"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -23,32 +26,43 @@ import (
 )
 
 const (
-	Version  = "1.0"
+	Version  = "r101"
 	Password = ""
 
 	DefaultFetchMaxSize        = 1024 * 1024 * 4
 	DefaultDeadline            = 20 * time.Second
 	DefaultOverquotaDelay      = 4 * time.Second
 	DefaultURLFetchClosedDelay = 1 * time.Second
-	DefaultSSLVerify           = false
 )
 
 func IsBinary(b []byte) bool {
-	if len(b) > 32 {
-		b = b[:32]
-	}
-	if bytes.HasPrefix(b, []byte{0xef, 0xbb, 0xbf}) {
+	if len(b) > 3 && b[0] == 0xef && b[1] == 0xbb && b[2] == 0xbf {
+		// utf-8 text
 		return false
 	}
-	for _, c := range b {
-		if c == '\n' {
-			break
-		}
+	for i, c := range b {
 		if c > 0x7f {
 			return true
 		}
+		if c == '\n' && i > 4 {
+			break
+		}
+		if i > 32 {
+			break
+		}
 	}
 	return false
+}
+
+func IsTextContentType(contentType string) bool {
+	// text/* for html, plain text
+	// application/{json, javascript} for ajax
+	// application/x-www-form-urlencoded for some video api
+	return strings.HasPrefix(contentType, "text/") ||
+		strings.HasPrefix(contentType, "application/json") ||
+		strings.HasPrefix(contentType, "application/x-javascript") ||
+		strings.HasPrefix(contentType, "application/javascript") ||
+		strings.HasPrefix(contentType, "application/x-www-form-urlencoded")
 }
 
 func ReadRequest(r io.Reader) (req *http.Request, err error) {
@@ -109,12 +123,12 @@ func ReadRequest(r io.Reader) (req *http.Request, err error) {
 
 func fmtError(c appengine.Context, err error) string {
 	return fmt.Sprintf(`{
-    "type": "appengine",
+    "type": "appengine(%s, %s/%s)",
     "host": "%s",
     "software": "%s",
     "error": "%s"
 }
-`, appengine.DefaultVersionHostname(c), appengine.ServerSoftware(), err.Error())
+`, runtime.Version(), runtime.GOOS, runtime.GOARCH, appengine.DefaultVersionHostname(c), appengine.ServerSoftware(), err.Error())
 }
 
 func handlerError(c appengine.Context, rw http.ResponseWriter, err error, code int) {
@@ -162,75 +176,58 @@ func handler(rw http.ResponseWriter, r *http.Request) {
 	req.Body = r.Body
 	defer req.Body.Close()
 
-	params := http.Header{}
-	var paramPrefix string = http.CanonicalHeaderKey("X-UrlFetch-")
-	for key, values := range req.Header {
-		if strings.HasPrefix(key, paramPrefix) {
-			params.Set(key, values[0])
+	params := make(map[string]string)
+	if options := req.Header.Get("X-UrlFetch-Options"); options != "" {
+		for _, pair := range strings.Split(options, ",") {
+			parts := strings.SplitN(pair, "=", 2)
+			if len(parts) == 1 {
+				params[strings.TrimSpace(pair)] = ""
+			} else {
+				params[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+			}
 		}
+		req.Header.Del("X-UrlFetch-Options")
 	}
 
-	for key, _ := range params {
-		req.Header.Del(key)
-	}
-
-	// req.Header.Del("X-Cloud-Trace-Context")
 	oAE := req.Header.Get("Accept-Encoding")
-	req.Header.Del("Accept-Encoding")
+	if strings.Contains(oAE, "gzip") && req.Header.Get("X-Requested-With") == "" {
+		req.Header.Set("Accept-Encoding", "gzip")
+	} else {
+		req.Header.Del("Accept-Encoding")
+	}
 
-	debugHeader := params.Get("X-UrlFetch-Debug")
-	debug := debugHeader != ""
+	_, debug := params["debug"]
 
 	if debug {
 		c.Infof("Parsed Request=%#v\n", req)
 	}
 
 	if Password != "" {
-		password := params.Get("X-UrlFetch-Password")
-		switch {
-		case password == "":
+		password, ok := params["password"]
+		if !ok {
 			handlerError(c, rw, fmt.Errorf("urlfetch password required"), http.StatusForbidden)
 			return
-		case password != Password:
+		} else if password != Password {
 			handlerError(c, rw, fmt.Errorf("urlfetch password is wrong"), http.StatusForbidden)
 			return
 		}
 	}
 
 	deadline := DefaultDeadline
-	if s := params.Get("X-UrlFetch-Deadline"); s != "" {
+	if s, ok := params["deadline"]; ok && s != "" {
 		if n, err := strconv.Atoi(s); err == nil {
 			deadline = time.Duration(n) * time.Second
 		}
 	}
 
-	overquotaDelay := DefaultOverquotaDelay
-	if s := params.Get("X-UrlFetch-OverquotaDelay"); s != "" {
-		if n, err := strconv.Atoi(s); err == nil {
-			overquotaDelay = time.Duration(n) * time.Second
-		}
-	}
-
-	urlfetchClosedDelay := DefaultURLFetchClosedDelay
-	if s := params.Get("X-UrlFetch-URLFetchClosedDelay"); s != "" {
-		if n, err := strconv.Atoi(s); err == nil {
-			urlfetchClosedDelay = time.Duration(n) * time.Second
-		}
-	}
-
 	fetchMaxSize := DefaultFetchMaxSize
-	if s := params.Get("X-UrlFetch-MaxSize"); s != "" {
+	if s, ok := params["maxsize"]; ok && s != "" {
 		if n, err := strconv.Atoi(s); err == nil {
 			fetchMaxSize = n
 		}
 	}
 
-	sslVerify := DefaultSSLVerify
-	if s := params.Get("X-UrlFetch-SSLVerify"); s != "" {
-		if n, err := strconv.Atoi(s); err == nil && n > 0 {
-			sslVerify = true
-		}
-	}
+	_, sslVerify := params["sslverify"]
 
 	var resp *http.Response
 	for i := 0; i < 2; i++ {
@@ -280,10 +277,10 @@ func handler(rw http.ResponseWriter, r *http.Request) {
 			}
 		} else if strings.Contains(message, "Over quota") {
 			c.Warningf("URLFetchServiceError %T(%v) deadline=%v, url=%v", err, err, deadline, req.URL.String())
-			time.Sleep(overquotaDelay)
+			time.Sleep(DefaultOverquotaDelay)
 		} else if strings.Contains(message, "urlfetch: CLOSED") {
 			c.Warningf("URLFetchServiceError %T(%v) deadline=%v, url=%v", err, err, deadline, req.URL.String())
-			time.Sleep(urlfetchClosedDelay)
+			time.Sleep(DefaultURLFetchClosedDelay)
 		} else {
 			c.Errorf("URLFetchServiceError %T(%v) deadline=%v, url=%v", err, err, deadline, req.URL.String())
 			break
@@ -304,30 +301,35 @@ func handler(rw http.ResponseWriter, r *http.Request) {
 		resp.Header.Set("Content-Length", strconv.FormatInt(resp.ContentLength, 10))
 	}
 
-	// urlfetch will decompress content, so try remove Content-Encoding
-	ce := resp.Header.Get("Content-Encoding")
-	ct := resp.Header.Get("Content-Type")
-	resp.Header.Del("Content-Encoding")
+	content := reflect.ValueOf(resp.Body).Elem().FieldByName("content").Bytes()
+	isTextContentType := IsTextContentType(resp.Header.Get("Content-Type"))
 
-	if (ce != "" ||
-		strings.HasPrefix(ct, "text/") ||
-		strings.HasPrefix(ct, "application/json") ||
-		strings.HasPrefix(ct, "application/x-javascript") ||
-		strings.HasPrefix(ct, "application/javascript") ||
-		strings.HasPrefix(ct, "application/x-www-form-urlencoded")) &&
-		resp.ContentLength > 1024 {
-		if v := reflect.ValueOf(resp.Body).Elem().FieldByName("content"); v.IsValid() {
+	if resp.Header.Get("Content-Encoding") == "br" && isTextContentType && !IsBinary(content) {
+		resp.Header.Del("Content-Encoding")
+	}
+
+	if resp.Header.Get("Content-Encoding") == "" && isTextContentType {
+		switch {
+		case IsBinary(content):
+			// urlfetch will remove "Content-Encoding: deflate" when "Accept-Encoding" contains "gzip"
+			ext := filepath.Ext(req.URL.Path)
+			if ext != "" && !IsTextContentType(mime.TypeByExtension(ext)) {
+				break
+			}
+			resp.Header.Set("Content-Encoding", "deflate")
+		case len(content) > 512:
+			// we got plain text here, try compress it
 			var bb bytes.Buffer
 			var w io.WriteCloser
-			var ce1 string
+			var ce string
 
 			switch {
 			case strings.Contains(oAE, "deflate"):
 				w, err = flate.NewWriter(&bb, flate.BestCompression)
-				ce1 = "deflate"
+				ce = "deflate"
 			case strings.Contains(oAE, "gzip"):
 				w, err = gzip.NewWriterLevel(&bb, gzip.BestCompression)
-				ce1 = "gzip"
+				ce = "gzip"
 			}
 
 			if err != nil {
@@ -336,7 +338,7 @@ func handler(rw http.ResponseWriter, r *http.Request) {
 			}
 
 			if w != nil {
-				w.Write(v.Bytes())
+				w.Write(content)
 				w.Close()
 
 				bbLen := int64(bb.Len())
@@ -344,7 +346,7 @@ func handler(rw http.ResponseWriter, r *http.Request) {
 					resp.Body = ioutil.NopCloser(&bb)
 					resp.ContentLength = bbLen
 					resp.Header.Set("Content-Length", strconv.FormatInt(resp.ContentLength, 10))
-					resp.Header.Set("Content-Encoding", ce1)
+					resp.Header.Set("Content-Encoding", ce)
 				}
 			}
 		}
@@ -414,15 +416,16 @@ func root(rw http.ResponseWriter, r *http.Request) {
 		message = "please update this server"
 	}
 	fmt.Fprintf(rw, `{
-	"server": "goproxy %s"
+	"server": "goproxy %s (%s, %s/%s)"
 	"latest": "%s",
 	"deploy": "%s",
 	"message": "%s"
 }
-`, Version, latest, ctime, message)
+`, Version, runtime.Version(), runtime.GOOS, runtime.GOARCH, latest, ctime, message)
 }
 
 func init() {
+	http.HandleFunc("/g", handler)
 	http.HandleFunc("/_gh/", handler)
 	http.HandleFunc("/favicon.ico", favicon)
 	http.HandleFunc("/robots.txt", robots)
